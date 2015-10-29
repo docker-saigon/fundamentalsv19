@@ -259,7 +259,7 @@ docker-compose up -d
 
 ### Docker Swarm
 
-Setup (done)
+Setup (done)[#manual-setup-of-docker-19]
 
 Get a Swarm token
 
@@ -291,7 +291,8 @@ docker-machine create -d digitalocean \
  swarm-node-00
 ```
 
-I had to manually upgrade kernel, get docker 1.9 & swarm 1.0.0 set up:
+Upgrade kernel, get docker 1.9 & swarm 1.0.0 set up.
+
 Set env
 
 ```
@@ -335,15 +336,33 @@ docker ps
 Exec into the containers and confirm they can ping each other
 No links, Accross Hosts..
 
+![Swarm Demo](docker-swarm.gif)
+
 ### Manual Setup of Docker 1.9
+
+Provision Ubuntu Droplet
+
+Upgrade Kernel
+
+![Upgrading Kernel on Digital Ocean](setup/DO-UpgradeKernel.png)
+
+Shutdown the droplet from the CLI, the new kernel will be selected when the droplet is turned back on (have to shut down).
 
 ```
 docker-machine ssh swarm-master
-
 docker-machine ssh swarm-node-00
 ```
-
 Start a Distributed key-value store (for example, consul)
+
+Download Consul (may need to `apt-get update && apt-get install unzip -y` first)
+```
+$ curl -OL https://dl.bintray.com/mitchellh/consul/0.5.2_linux_amd64.zip
+$ unzip 0.5.2_linux_amd64.zip
+$ mv consul /usr/local/bin/
+$ rm 0.5.2_linux_amd64.zip
+```
+
+Better to use `screen` or `tmux` or deamonize the process
 
 ```
 #master
@@ -359,21 +378,62 @@ Join node to master
 consul join 128.199.175.75
 ```
 
-Show Docker Options on both hosts
+Set Docker daemon Options for cluster store (required for overlay network)
 
 ```
-cat /etc/default/docker
+vim /etc/default/docker
+
+#master:
+DOCKER_OPTS='
+-H tcp://0.0.0.0:2376
+-H unix:///var/run/docker.sock
+--cluster-store=consul://localhost:8500
+--cluster-advertise=128.199.175.75:2376
+--label=com.docker.network.driver.overlay.bind_interface=eth0
+--storage-driver aufs
+--tlsverify
+--tlscacert /etc/docker/ca.pem
+--tlscert /etc/docker/server.pem
+--tlskey /etc/docker/server-key.pem
+--label provider=digitalocean
+
+'
+
+#node:
+DOCKER_OPTS='
+-H tcp://0.0.0.0:2376
+-H unix:///var/run/docker.sock
+--cluster-store=consul://localhost:8500
+--cluster-advertise=128.199.206.65:2376
+--label=com.docker.network.driver.overlay.bind_interface=eth0
+--label=com.docker.network.driver.overlay.neighbor_ip=128.199.175.75
+--storage-driver aufs
+--tlsverify
+--tlscacert /etc/docker/ca.pem
+--tlscert /etc/docker/server.pem
+--tlskey /etc/docker/server-key.pem
+--label provider=digitalocean
+
+'
 ```
 
-Start Docker daemon on both hosts
+
+Stop Docker daemon and get v1.9-rc3 on both hosts
 
 ```
 stop docker
-restart docker
+
+docker mv /usr/bin/docker /usr/bin/docker-1.8.3
+curl -Lo /usr/bin/docker  https://test.docker.com/builds/Linux/x86_64/docker-1.9.0-rc3
+chmod +x /usr/bin/docker
+
 start docker
+
 ```
 
-Get docker logs to troubleshoot
+Get docker logs to troubleshoot in case any errors 
+
+(sometimes required to `curl -sSL https://get.docker.com/ | sh` again	)
 
 ```
 tail -f /var/log/upstart/docker.log
