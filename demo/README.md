@@ -58,7 +58,7 @@ Packages installed?
 ```
 dpkg -l | wc -l
 ```
-<kbd>CTRL</kbd><kbd>D</kbd>
+<kbd>CTRL</kbd>+<kbd>D</kbd>
 
 Fedora?
 
@@ -77,7 +77,7 @@ Packages installed
 rpm -qa | wc -l
 ```
 
-<kbd>CTRL</kbd><kbd>D</kbd>
+<kbd>CTRL</kbd>+<kbd>D</kbd>
 
 How fast?
 
@@ -120,7 +120,7 @@ Install a new package
 apt-get update && apt-get install zsh -y
 ```
 
-<kbd>CTRL</kbd><kbd>D</kbd>
+<kbd>CTRL</kbd>+<kbd>D</kbd>
 
 Docker allows to tag & share this new container.
 
@@ -259,7 +259,7 @@ docker-compose up -d
 
 ### Docker Swarm
 
-Setup (done)[#manual-setup-of-docker-19]
+[See Setup](#manual-setup-of-docker-19) to set up your own cluster.
 
 Get a Swarm token
 
@@ -476,4 +476,3 @@ docker run -d \
  --strategy spread \
  token://fe389f9b564f3a225fd45a4f65a7db8d
 ```
-
