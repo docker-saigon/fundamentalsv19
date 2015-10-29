@@ -1,0 +1,104 @@
+#cloud-config
+
+write-files:
+  - path: /opt/bin/wupiao
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # [w]ait [u]ntil [p]ort [i]s [a]ctually [o]pen
+      [ -n "$1" ] && [ -n "$2" ] && while ! curl --output /dev/null \
+        --silent --head --fail \
+        http://${1}:${2}; do sleep 1 && echo -n .; done;
+      exit $?
+hostname: master
+ssh_authorized_keys:
+  - ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEAm1640ImJQ7hC7Ce5ieOyk0F8fku6Ml1kqqpKtzmvofOV1058VzHtPx1u6OUgwKTNjNIH4KtQoUQfzLmlguQOotIqlGDm4EW5rWQV6IqMLSoC2hWgc7gE6kwRL1zHsTYdPOgd3vI6RipAvz31C5OcwTsxsgZSO1T64IoVK0QwO28Ny1ezXrQoqX761JCJSbtYGTZrCPBiBpQLz+uRaeZKO8UBBkq6mFlF/RZSv9LZl8Z/ocYll8f8jfh+FGRjU/6dskVGSWeeI2oomGowpu9vQght3wsle01YmTdaxNxAetuGYOXgPMbXaE8oWSMC1oi1j8XLj3Eqy9iIBuRO26Bp+w==
+coreos:
+  etcd2:
+    name: master
+    listen-client-urls: http://0.0.0.0:2379,http://0.0.0.0:4001
+    advertise-client-urls: http://192.168.237.5:2379,http://192.168.237.5:4001
+    initial-cluster-token: swarm_etcd
+    listen-peer-urls: http://192.168.237.5:2380,http://192.168.237.5:7001
+    initial-advertise-peer-urls: http://192.168.237.5:2380
+    initial-cluster: master=http://192.168.237.5:2380
+    initial-cluster-state: new
+  units:
+    - name: 00-eth0.network
+      runtime: true
+      content: |
+        [Match]
+        Name=eth0
+        [Network]
+        Address=192.168.237.5
+        Gateway=192.168.237.2
+        DNS=192.168.237.2
+        DNS=8.8.8.8
+    - name: down-interfaces.service
+      command: start
+      content: |
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/bin/ip link set eth0 down
+        ExecStart=/usr/bin/ip addr flush dev eth0
+    - name: systemd-networkd.service
+      command: restart
+    - name: docker-tcp.socket
+      command: start
+      enable: true
+      content: |
+        [Unit]
+        Description=Docker Socket for the API
+        [Socket]
+        ListenStream=2375
+        BindIPv6Only=both
+        Service=docker.service
+        [Install]
+        WantedBy=sockets.target
+    - name: etcd2.service
+      command: start
+    - name: get-docker-compose.service
+      command: start
+      content: |
+        [Unit]
+        Description=get docker-compose 1.5-rc1
+        After=network.target
+        [Service]
+        ExecStartPre=/usr/bin/curl -Lo /opt/bin/docker-compose -z /opt/bin/docker-compose https://github.com/docker/compose/releases/download/1.5.0rc1/docker-compose-Linux-x86_64
+        ExecStart=/usr/bin/chmod +x /opt/bin/docker-compose
+        RemainAfterExit=yes
+        Type=oneshot
+    - name: docker.service
+      command: restart
+      content: |
+        [Unit]
+        Description=Docker Application Container Engine 1.9.0-rc1
+        Documentation=http://docs.docker.io
+        After=network.target docker-tcp.socket
+        requires=docker-tcp.socket
+        [Service]
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/docker -z /opt/bin/docker https://test.docker.com/builds/Linux/x86_64/docker-1.9.0-rc1
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/docker
+        ExecStart=/opt/bin/docker daemon \
+        --cluster-store=etcd://0.0.0.0:2379 \
+        --label=com.docker.network.driver.overlay.bind_interface=eth0 \
+        $DOCKER_OPTS $DOCKER_OPT_BIP $DOCKER_OPT_MTU $DOCKER_OPT_IPMASQ
+        [Install]
+        WantedBy=multi-user.target
+    - name: swarm.service
+      command: start
+      content: |
+        [Unit]
+        Description=Swarm Manager 1.0.0-rc2
+        Documentation=https://github.com/docker/swarm
+        Requires=docker.service
+        After=docker.service
+        [Service]
+        ExecStartPre=/usr/bin/curl -L -o /opt/bin/swarm -z /opt/bin/swarm https://raw.githubusercontent.com/docker/swarm-library-image/2b222a398b836073e8dab076321f3d1bde653674/swarm
+        ExecStartPre=/usr/bin/chmod +x /opt/bin/swarm
+        ExecStart=/opt/bin/swarm manage -H tcp://192.168.237.5:2375 etcd://0.0.0.0:2379
+        Restart=always
+        RestartSec=10
+  update:
+    group: alpha
+    reboot-strategy: off

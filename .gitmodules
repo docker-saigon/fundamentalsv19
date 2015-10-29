@@ -1,0 +1,6 @@
+[submodule "demo/hello-tutum"]
+	path = demo/hello-tutum
+	url = git@github.com:tutumcloud/hello-world.git
+[submodule "demo/trainingwheels"]
+	path = demo/trainingwheels
+	url = git://github.com/jpetazzo/trainingwheels
